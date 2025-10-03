@@ -143,7 +143,6 @@ window.loadImageFile = function(event)
 
 			var posAttribLoc = gl.getAttribLocation(program, "position");
 			var posBuffer = createBuffer(gl, gl.ARRAY_BUFFER, meshArray);
-
 			vao = createVAO(gl, posAttribLoc, posBuffer, null, null, null, null);
 		};
 		img.onerror = function() 
