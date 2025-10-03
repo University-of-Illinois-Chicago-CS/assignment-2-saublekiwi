@@ -49,7 +49,7 @@ function processImage(img)
 	return {
 		data: heightArray,
 		width: sw,
-		height: sw
+		height: sh // fixed, was sw in the starter code
 	};
 }
 
@@ -81,6 +81,70 @@ window.loadImageFile = function(event)
 			*/
 			console.log('loaded image: ' + heightmapData.width + ' x ' + heightmapData.height);
 
+			// creates the 1D mesh vertex coordinate array
+			// the pixels in the image create a mesh of quads, 
+			// each quad is two triangles, each triangle has 3 vertices, and each vertex has 3 coordinates
+			// making the size number of pixels * 2 * 3 * 3 = number of pixels * 18
+			var meshArray = new Float32Array(heightmapData.width * heightmapData.height * 18);
+
+			vertexCount = 0;
+			var w = heightmapData.width;
+			var h = heightmapData.height;
+
+			// ignores the last col because there is not one after it to form a quad
+			// (when y = h - 1 row h will be used and there's nothing after that)
+			for (var y = 0; y < h - 1; y++) {
+				// same reasoning as above for the rows
+    			for (var x = 0; x < w - 1; x++) {
+					// get height of corner vertices
+					var htl = heightmapData.data[y * w + x] * 2 - 1; // top left
+					var htr = heightmapData.data[y * w + x + 1] * 2 - 1; // top right
+					var hbl = heightmapData.data[(y + 1) * w + x] * 2 - 1; // bottom left
+					var hbr = heightmapData.data[(y + 1) * w + x + 1] * 2 - 1; // bottom right
+
+					var x0 = (x / (w - 1)) * 2 - 1;
+					var x1 = ((x + 1) / (w - 1)) * 2 - 1;
+					var z0 = (y / (h - 1)) * 2 - 1;
+					var z1 = ((y + 1) / (h - 1)) * 2 - 1;
+
+					// first triangle (tl, bl, tr)
+					meshArray[vertexCount] = x0;
+					meshArray[vertexCount + 1] = htl;
+					meshArray[vertexCount + 2] = z0;
+
+					meshArray[vertexCount + 3] = x0;
+					meshArray[vertexCount + 4] = hbl;
+					meshArray[vertexCount + 5] = z1;
+
+					meshArray[vertexCount + 6] = x1;
+					meshArray[vertexCount + 7] = htr;
+					meshArray[vertexCount + 8] = z0;
+
+					// second triangle (tr, bl, br)
+					meshArray[vertexCount + 9] = x1;
+					meshArray[vertexCount + 10] = htr;
+					meshArray[vertexCount + 11] = z0;
+
+					meshArray[vertexCount + 12] = x0;
+					meshArray[vertexCount + 13] = hbl;
+					meshArray[vertexCount + 14] = z1;
+
+					meshArray[vertexCount + 15] = x1;
+					meshArray[vertexCount + 16] = hbr;
+					meshArray[vertexCount + 17] = z1;
+
+					vertexCount += 18;
+				}
+			}
+
+			// adds 1 to change it from being an index value to a total count
+			// divides by 3 because it is actually used as triangle count by draw()
+			vertexCount = (vertexCount + 1) / 3;
+
+			var posAttribLoc = gl.getAttribLocation(program, "position");
+			var posBuffer = createBuffer(gl, gl.ARRAY_BUFFER, meshArray);
+
+			vao = createVAO(gl, posAttribLoc, posBuffer, null, null, null, null);
 		};
 		img.onerror = function() 
 		{
@@ -124,7 +188,7 @@ function draw()
 	);
 
 	// eye and target
-	var eye = [0, 5, 5];
+	var eye = [0, .5, .5];
 	var target = [0, 0, 0];
 
 	var modelMatrix = identityMatrix();
