@@ -8,6 +8,8 @@ var vertexCount = 0;
 var uniformModelViewLoc = null;
 var uniformProjectionLoc = null;
 var heightmapData = null;
+var zoom = 5;
+var rotationX = 0, rotationY = 0;
 
 function processImage(img)
 {
@@ -187,12 +189,17 @@ function draw()
 	);
 
 	// eye and target
-	var eye = [0, .5, .5];
+	// removed elevated start location for eye to make rotation more intuitive
+	var eye = [zoom, 0, 0]; // eye distance from model = zoom
 	var target = [0, 0, 0];
 
 	var modelMatrix = identityMatrix();
 
 	// TODO: set up transformations to the model
+
+	// rotates the model around Y axis and Z axis, based on horizontal and vertical mouse drags
+	modelMatrix = multiplyMatrices(modelMatrix, rotateYMatrix(-rotationX));
+	modelMatrix = multiplyMatrices(modelMatrix, rotateZMatrix(rotationY));
 
 	// setup viewing matrix
 	var eyeToTarget = subtract(target, eye);
@@ -317,13 +324,17 @@ function addMouseCallback(canvas)
 	canvas.addEventListener("wheel", function(e)  {
 		e.preventDefault(); // prevents page scroll
 
+		var zoomSpeed = 0.1;
+
 		if (e.deltaY < 0) 
 		{
 			console.log("Scrolled up");
-			// e.g., zoom in
+			// zoom in, capped at 0.0001
+			zoom = Math.max(0.0001, zoom - zoomSpeed);
 		} else {
 			console.log("Scrolled down");
-			// e.g., zoom out
+			// zoom out, capped at 10
+			zoom = Math.min(10, zoom + zoomSpeed);
 		}
 	});
 
@@ -336,7 +347,20 @@ function addMouseCallback(canvas)
 		var deltaY = currentY - startY;
 		console.log('mouse drag by: ' + deltaX + ', ' + deltaY);
 
-		// implement dragging logic
+		var roationSpeed = 0.005;
+
+		if (leftMouse) // rotate model
+		{
+			rotationX += deltaX * roationSpeed;
+			rotationY += deltaY * roationSpeed;
+		}
+		else // pan
+		{
+
+		}
+
+		startX = currentX;
+        startY = currentY;
 	});
 
 	document.addEventListener("mouseup", function () {
