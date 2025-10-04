@@ -8,6 +8,10 @@ var vertexCount = 0;
 var uniformModelViewLoc = null;
 var uniformProjectionLoc = null;
 var heightmapData = null;
+var zoom = 5;
+var rotationX = 0, rotationY = 0;
+var panX = 0, panZ = 0;
+var wireframe = false;
 
 function processImage(img)
 {
@@ -49,14 +53,18 @@ function processImage(img)
 	return {
 		data: heightArray,
 		width: sw,
-		height: sw
+		height: sh // fixed, was sw in the starter code
 	};
+}
+
+window.wireframeMode = function(event)
+{
+	wireframe = event.target.checked;
 }
 
 
 window.loadImageFile = function(event)
 {
-
 	var f = event.target.files && event.target.files[0];
 	if (!f) return;
 	
@@ -81,6 +89,69 @@ window.loadImageFile = function(event)
 			*/
 			console.log('loaded image: ' + heightmapData.width + ' x ' + heightmapData.height);
 
+			// creates the 1D mesh vertex coordinate array
+			// the pixels in the image create a mesh of quads, 
+			// each quad is two triangles, each triangle has 3 vertices, and each vertex has 3 coordinates
+			// making the size number of pixels * 2 * 3 * 3 = number of pixels * 18
+			var meshArray = new Float32Array(heightmapData.width * heightmapData.height * 18);
+
+			vertexCount = 0;
+			var w = heightmapData.width;
+			var h = heightmapData.height;
+
+			// ignores the last col because there is not one after it to form a quad
+			// (when y = h - 1 row h will be used and there's nothing after that)
+			for (var y = 0; y < h - 1; y++) {
+				// same reasoning as above for the rows
+    			for (var x = 0; x < w - 1; x++) {
+					// get height of corner vertices
+					var htl = heightmapData.data[y * w + x] * 2 - 1; // top left
+					var htr = heightmapData.data[y * w + x + 1] * 2 - 1; // top right
+					var hbl = heightmapData.data[(y + 1) * w + x] * 2 - 1; // bottom left
+					var hbr = heightmapData.data[(y + 1) * w + x + 1] * 2 - 1; // bottom right
+
+					var x0 = (x / (w - 1)) * 2 - 1;
+					var x1 = ((x + 1) / (w - 1)) * 2 - 1;
+					var z0 = (y / (h - 1)) * 2 - 1;
+					var z1 = ((y + 1) / (h - 1)) * 2 - 1;
+
+					// first triangle (tl, bl, tr)
+					meshArray[vertexCount] = x0;
+					meshArray[vertexCount + 1] = htl;
+					meshArray[vertexCount + 2] = z0;
+
+					meshArray[vertexCount + 3] = x0;
+					meshArray[vertexCount + 4] = hbl;
+					meshArray[vertexCount + 5] = z1;
+
+					meshArray[vertexCount + 6] = x1;
+					meshArray[vertexCount + 7] = htr;
+					meshArray[vertexCount + 8] = z0;
+
+					// second triangle (tr, bl, br)
+					meshArray[vertexCount + 9] = x1;
+					meshArray[vertexCount + 10] = htr;
+					meshArray[vertexCount + 11] = z0;
+
+					meshArray[vertexCount + 12] = x0;
+					meshArray[vertexCount + 13] = hbl;
+					meshArray[vertexCount + 14] = z1;
+
+					meshArray[vertexCount + 15] = x1;
+					meshArray[vertexCount + 16] = hbr;
+					meshArray[vertexCount + 17] = z1;
+
+					vertexCount += 18;
+				}
+			}
+
+			// adds 1 to change it from being an index value to a total count
+			// divides by 3 because it is actually used as triangle count by draw()
+			vertexCount = (vertexCount + 1) / 3;
+
+			var posAttribLoc = gl.getAttribLocation(program, "position");
+			var posBuffer = createBuffer(gl, gl.ARRAY_BUFFER, meshArray);
+			vao = createVAO(gl, posAttribLoc, posBuffer, null, null, null, null);
 		};
 		img.onerror = function() 
 		{
@@ -109,35 +180,66 @@ function setupViewMatrix(eye, target)
 }
 function draw()
 {
+	var projectionMatrix = null;
 
-	var fovRadians = 70 * Math.PI / 180;
+	// aspect ratio used to keep model proportions correct
 	var aspectRatio = +gl.canvas.width / +gl.canvas.height;
-	var nearClip = 0.001;
-	var farClip = 20.0;
+	
+	// eye (dependant on projection mode) and target
+	// removed elevated start location for eye to make rotation more intuitive
+	var eye;
+	var target = [0, 0, 0];
 
 	// perspective projection
-	var projectionMatrix = perspectiveMatrix(
-		fovRadians,
-		aspectRatio,
-		nearClip,
-		farClip,
-	);
+	if (document.querySelector("#projectionMode").value == "") 
+	{
+		eye = [0, 0, zoom]; // eye distance from model = zoom
 
-	// eye and target
-	var eye = [0, 5, 5];
-	var target = [0, 0, 0];
+		var fovRadians = 70 * Math.PI / 180;
+		var nearClip = 0.001;
+		var farClip = 20.0;
+
+		projectionMatrix = perspectiveMatrix(
+			fovRadians,
+			aspectRatio,
+			nearClip,
+			farClip,
+		);
+	}
+
+	// orthographic projection
+	else
+	{
+		eye = [0, 0, 5];
+
+		var left = -zoom;
+		var right = zoom;
+		var bottom = -zoom / aspectRatio;
+		var top = zoom / aspectRatio;
+		var near = -20;
+		var far = 20;
+
+		projectionMatrix = orthographicMatrix(left, right, bottom, top, near, far)
+	}
 
 	var modelMatrix = identityMatrix();
 
-	// TODO: set up transformations to the model
+	// scale the height between 0 and 2 times the default
+	modelMatrix = multiplyMatrices(modelMatrix, scaleMatrix(1, document.querySelector("#height").value / 50.0, 1));
 
 	// setup viewing matrix
 	var eyeToTarget = subtract(target, eye);
 	var viewMatrix = setupViewMatrix(eye, target);
+	
+	// rotates the view around Y axis and Z axis, based on horizontal and vertical mouse drags
+	viewMatrix = multiplyMatrices(viewMatrix, rotateYMatrix(-rotationX));
+	viewMatrix = multiplyMatrices(viewMatrix, rotateZMatrix(rotationY));
 
+	// pans the view along the X and Z axis
+	viewMatrix = multiplyMatrices(viewMatrix, translateMatrix(panZ, 0, -panX));
+	
 	// model-view Matrix = view * model
 	var modelviewMatrix = multiplyMatrices(viewMatrix, modelMatrix);
-
 
 	// enable depth testing
 	gl.enable(gl.DEPTH_TEST);
@@ -156,9 +258,21 @@ function draw()
 	gl.uniformMatrix4fv(uniformProjectionLoc, false, new Float32Array(projectionMatrix));
 
 	gl.bindVertexArray(vao);
+
+	// reender line loops instead of solid trianges
+	if (wireframe)
+	{
+		for (var i = 0; i < vertexCount; i+=3)
+		{
+			gl.drawArrays(gl.LINE_LOOP, i, 3);
+		}
+	}
 	
-	var primitiveType = gl.TRIANGLES;
-	gl.drawArrays(primitiveType, 0, vertexCount);
+	else
+	{
+		var primitiveType = gl.TRIANGLES;
+		gl.drawArrays(primitiveType, 0, vertexCount);
+	}
 
 	requestAnimationFrame(draw);
 
@@ -254,13 +368,17 @@ function addMouseCallback(canvas)
 	canvas.addEventListener("wheel", function(e)  {
 		e.preventDefault(); // prevents page scroll
 
+		var zoomSpeed = 0.1;
+
 		if (e.deltaY < 0) 
 		{
 			console.log("Scrolled up");
-			// e.g., zoom in
+			// zoom in, capped at 0.0001
+			zoom = Math.max(0.0001, zoom - zoomSpeed);
 		} else {
 			console.log("Scrolled down");
-			// e.g., zoom out
+			// zoom out, capped at 10
+			zoom = Math.min(10, zoom + zoomSpeed);
 		}
 	});
 
@@ -273,7 +391,22 @@ function addMouseCallback(canvas)
 		var deltaY = currentY - startY;
 		console.log('mouse drag by: ' + deltaX + ', ' + deltaY);
 
-		// implement dragging logic
+		var roationSpeed = 0.005;
+		var panSpeed = 0.01;
+
+		if (leftMouse) // rotate view
+		{
+			rotationX += deltaX * roationSpeed;
+			rotationY += deltaY * roationSpeed;
+		}
+		else // pan along X and Z axis
+		{
+			panX += deltaX * panSpeed;
+			panZ += deltaY * panSpeed;
+		}
+
+		startX = currentX;
+        startY = currentY;
 	});
 
 	document.addEventListener("mouseup", function () {
