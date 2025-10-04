@@ -11,6 +11,7 @@ var heightmapData = null;
 var zoom = 5;
 var rotationX = 0, rotationY = 0;
 var panX = 0, panZ = 0;
+var wireframe = false;
 
 function processImage(img)
 {
@@ -56,10 +57,14 @@ function processImage(img)
 	};
 }
 
+window.wireframeMode = function(event)
+{
+	wireframe = event.target.checked;
+}
+
 
 window.loadImageFile = function(event)
 {
-
 	var f = event.target.files && event.target.files[0];
 	if (!f) return;
 	
@@ -180,7 +185,7 @@ function draw()
 	// aspect ratio used to keep model proportions correct
 	var aspectRatio = +gl.canvas.width / +gl.canvas.height;
 	
-	// eye and target
+	// eye (dependant on projection mode) and target
 	// removed elevated start location for eye to make rotation more intuitive
 	var eye;
 	var target = [0, 0, 0];
@@ -219,10 +224,6 @@ function draw()
 
 	var modelMatrix = identityMatrix();
 
-	// rotates the model around Y axis and Z axis, based on horizontal and vertical mouse drags
-	//modelMatrix = multiplyMatrices(modelMatrix, rotateYMatrix(-rotationX));
-	//modelMatrix = multiplyMatrices(modelMatrix, rotateZMatrix(rotationY));
-
 	// scale the height between 0 and 2 times the default
 	modelMatrix = multiplyMatrices(modelMatrix, scaleMatrix(1, document.querySelector("#height").value / 50.0, 1));
 
@@ -230,14 +231,15 @@ function draw()
 	var eyeToTarget = subtract(target, eye);
 	var viewMatrix = setupViewMatrix(eye, target);
 	
+	// rotates the view around Y axis and Z axis, based on horizontal and vertical mouse drags
 	viewMatrix = multiplyMatrices(viewMatrix, rotateYMatrix(-rotationX));
 	viewMatrix = multiplyMatrices(viewMatrix, rotateZMatrix(rotationY));
 
-	viewMatrix = multiplyMatrices(viewMatrix, translateMatrix(panX, 0, panZ));
+	// pans the view along the X and Z axis
+	viewMatrix = multiplyMatrices(viewMatrix, translateMatrix(panZ, 0, -panX));
 	
 	// model-view Matrix = view * model
 	var modelviewMatrix = multiplyMatrices(viewMatrix, modelMatrix);
-
 
 	// enable depth testing
 	gl.enable(gl.DEPTH_TEST);
@@ -256,9 +258,21 @@ function draw()
 	gl.uniformMatrix4fv(uniformProjectionLoc, false, new Float32Array(projectionMatrix));
 
 	gl.bindVertexArray(vao);
+
+	// reender line loops instead of solid trianges
+	if (wireframe)
+	{
+		for (var i = 0; i < vertexCount; i+=3)
+		{
+			gl.drawArrays(gl.LINE_LOOP, i, 3);
+		}
+	}
 	
-	var primitiveType = gl.TRIANGLES;
-	gl.drawArrays(primitiveType, 0, vertexCount);
+	else
+	{
+		var primitiveType = gl.TRIANGLES;
+		gl.drawArrays(primitiveType, 0, vertexCount);
+	}
 
 	requestAnimationFrame(draw);
 
@@ -380,7 +394,7 @@ function addMouseCallback(canvas)
 		var roationSpeed = 0.005;
 		var panSpeed = 0.01;
 
-		if (leftMouse) // rotate model
+		if (leftMouse) // rotate view
 		{
 			rotationX += deltaX * roationSpeed;
 			rotationY += deltaY * roationSpeed;
