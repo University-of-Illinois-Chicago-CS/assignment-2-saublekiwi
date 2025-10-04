@@ -174,32 +174,55 @@ function setupViewMatrix(eye, target)
 }
 function draw()
 {
-
-	var fovRadians = 70 * Math.PI / 180;
+	var projectionMatrix = null;
+	// aspect ratio used to keep model proportions correct
 	var aspectRatio = +gl.canvas.width / +gl.canvas.height;
-	var nearClip = 0.001;
-	var farClip = 20.0;
-
-	// perspective projection
-	var projectionMatrix = perspectiveMatrix(
-		fovRadians,
-		aspectRatio,
-		nearClip,
-		farClip,
-	);
-
+	
 	// eye and target
 	// removed elevated start location for eye to make rotation more intuitive
-	var eye = [zoom, 0, 0]; // eye distance from model = zoom
+	var eye;
 	var target = [0, 0, 0];
 
-	var modelMatrix = identityMatrix();
+	// perspective projection
+	if (document.querySelector("#projectionMode").value == "") 
+	{
+		eye = [zoom, 0, 0]; // eye distance from model = zoom
 
-	// TODO: set up transformations to the model
+		var fovRadians = 70 * Math.PI / 180;
+		var nearClip = 0.001;
+		var farClip = 20.0;
+
+		projectionMatrix = perspectiveMatrix(
+			fovRadians,
+			aspectRatio,
+			nearClip,
+			farClip,
+		);
+	}
+
+	// orthographic projection
+	else
+	{
+		eye = [5, 0, 0];
+
+		var left = -zoom;
+		var right = zoom;
+		var bottom = -zoom / aspectRatio;
+		var top = zoom / aspectRatio;
+		var near = -20;
+		var far = 20;
+
+		projectionMatrix = orthographicMatrix(left, right, bottom, top, near, far)
+	}
+
+	var modelMatrix = identityMatrix();
 
 	// rotates the model around Y axis and Z axis, based on horizontal and vertical mouse drags
 	modelMatrix = multiplyMatrices(modelMatrix, rotateYMatrix(-rotationX));
 	modelMatrix = multiplyMatrices(modelMatrix, rotateZMatrix(rotationY));
+
+	// scale the height between 0 and 2 times the default
+	modelMatrix = multiplyMatrices(modelMatrix, scaleMatrix(1, document.querySelector("#height").value / 50.0, 1));
 
 	// setup viewing matrix
 	var eyeToTarget = subtract(target, eye);
