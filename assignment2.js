@@ -10,6 +10,7 @@ var uniformProjectionLoc = null;
 var heightmapData = null;
 var zoom = 5;
 var rotationX = 0, rotationY = 0;
+var panX = 0, panZ = 0;
 
 function processImage(img)
 {
@@ -175,6 +176,7 @@ function setupViewMatrix(eye, target)
 function draw()
 {
 	var projectionMatrix = null;
+
 	// aspect ratio used to keep model proportions correct
 	var aspectRatio = +gl.canvas.width / +gl.canvas.height;
 	
@@ -186,7 +188,7 @@ function draw()
 	// perspective projection
 	if (document.querySelector("#projectionMode").value == "") 
 	{
-		eye = [zoom, 0, 0]; // eye distance from model = zoom
+		eye = [0, 0, zoom]; // eye distance from model = zoom
 
 		var fovRadians = 70 * Math.PI / 180;
 		var nearClip = 0.001;
@@ -203,7 +205,7 @@ function draw()
 	// orthographic projection
 	else
 	{
-		eye = [5, 0, 0];
+		eye = [0, 0, 5];
 
 		var left = -zoom;
 		var right = zoom;
@@ -218,8 +220,8 @@ function draw()
 	var modelMatrix = identityMatrix();
 
 	// rotates the model around Y axis and Z axis, based on horizontal and vertical mouse drags
-	modelMatrix = multiplyMatrices(modelMatrix, rotateYMatrix(-rotationX));
-	modelMatrix = multiplyMatrices(modelMatrix, rotateZMatrix(rotationY));
+	//modelMatrix = multiplyMatrices(modelMatrix, rotateYMatrix(-rotationX));
+	//modelMatrix = multiplyMatrices(modelMatrix, rotateZMatrix(rotationY));
 
 	// scale the height between 0 and 2 times the default
 	modelMatrix = multiplyMatrices(modelMatrix, scaleMatrix(1, document.querySelector("#height").value / 50.0, 1));
@@ -227,7 +229,12 @@ function draw()
 	// setup viewing matrix
 	var eyeToTarget = subtract(target, eye);
 	var viewMatrix = setupViewMatrix(eye, target);
+	
+	viewMatrix = multiplyMatrices(viewMatrix, rotateYMatrix(-rotationX));
+	viewMatrix = multiplyMatrices(viewMatrix, rotateZMatrix(rotationY));
 
+	viewMatrix = multiplyMatrices(viewMatrix, translateMatrix(panX, 0, panZ));
+	
 	// model-view Matrix = view * model
 	var modelviewMatrix = multiplyMatrices(viewMatrix, modelMatrix);
 
@@ -371,15 +378,17 @@ function addMouseCallback(canvas)
 		console.log('mouse drag by: ' + deltaX + ', ' + deltaY);
 
 		var roationSpeed = 0.005;
+		var panSpeed = 0.01;
 
 		if (leftMouse) // rotate model
 		{
 			rotationX += deltaX * roationSpeed;
 			rotationY += deltaY * roationSpeed;
 		}
-		else // pan
+		else // pan along X and Z axis
 		{
-
+			panX += deltaX * panSpeed;
+			panZ += deltaY * panSpeed;
 		}
 
 		startX = currentX;
